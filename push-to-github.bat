@@ -3,7 +3,7 @@ setlocal
 title Push AURAVISION to GitHub
 echo ========================================================
 echo   Pushing AURAVISION to GitHub
-echo   Repository: https://github.com/harshithaa9740/AI-Human-activity-recognition.git
+echo   Repository: https://github.com/harshithaa9740/AI-HAR.git
 echo ========================================================
 echo.
 set "GIT_EXE=C:\Users\Harshitha\AppData\Local\Programs\Git\cmd\git.exe"
@@ -27,13 +27,13 @@ if "%TOKEN%"=="" (
 
 echo.
 echo Pushing to GitHub...
-"%GIT_EXE%" push "https://%TOKEN%@github.com/harshithaa9740/AI-Human-activity-recognition.git" main
+"%GIT_EXE%" push -u "https://%TOKEN%@github.com/harshithaa9740/AI-HAR.git" main
 
 if %ERRORLEVEL% EQU 0 (
     echo.
     echo ========================================================
     echo   SUCCESS! Project pushed to:
-    echo   https://github.com/harshithaa9740/AI-Human-activity-recognition
+    echo   https://github.com/harshithaa9740/AI-HAR
     echo ========================================================
 ) else (
     echo.
