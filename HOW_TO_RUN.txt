@@ -1,0 +1,23 @@
+============================================================
+AURAVISION - AI Human Activity Recognition (SIH Edition)
+============================================================
+
+HOW TO RUN:
+
+👉 Option 1 (Recommended):
+   Double-click "start-app.bat"
+   It will automatically host and launch http://localhost:8080/ in your browser.
+
+👉 Option 2:
+   Double-click "index.html" directly in Google Chrome or Microsoft Edge.
+
+No Node.js, Python, or installations required!
+
+FEATURES INCLUDED:
+- AI Human Activity Recognition (HAR) Engine
+- 33-Keypoint MediaPipe Human Skeleton Pose Tracker
+- Chemical SOP Protocol Sequence Validation (Valid, Skipped, Out of Order)
+- Real-Time Voice Audio Guidance & Alerts
+- 6 Interactive Simulation Scenarios (Normal, Skipped Step, Low Conf, etc.)
+- Laboratory-Grade Light Theme with Dark Theme Toggle
+============================================================

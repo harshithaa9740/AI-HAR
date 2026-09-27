@@ -1,0 +1,2 @@
+{"timestamp": "2026-09-20T08:05:13Z", "session_id": "47", "session_code": "ASTRO-MOCK-ab01", "step_number": 1, "action_code": "PICK_TOOL", "result": "VALID", "confidence": 0.95, "metadata": {"objects": ["tool"], "message": "Expected step completed. Proceed to Step 2: Open Container."}}
+{"timestamp": "2026-09-20T08:05:14Z", "session_id": "47", "session_code": "ASTRO-MOCK-ab01", "step_number": 2, "action_code": "OPEN_CONTAINER", "result": "VALID", "confidence": 0.93, "metadata": {"objects": ["container"], "message": "Expected step completed. Proceed to Step 3: Take Sample."}}
