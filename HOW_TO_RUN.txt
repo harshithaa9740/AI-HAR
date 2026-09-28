@@ -1,23 +1,40 @@
 ============================================================
-AURAVISION - AI Human Activity Recognition (SIH Edition)
+AURAVISION - AI Human Activity Recognition (ISRO / SIH Edition)
+React + TypeScript Frontend + FastAPI Backend (Offline LAN)
 ============================================================
 
 HOW TO RUN:
 
-👉 Option 1 (Recommended):
-   Double-click "start-app.bat"
-   It will automatically host and launch http://localhost:8080/ in your browser.
+👉 1. One-Click Launch (Recommended):
+   Double-click "start-auravision.bat"
+   - Automatically starts the FastAPI Backend on http://0.0.0.0:8000
+   - Automatically starts the React Frontend on http://0.0.0.0:3000
+   - Opens http://localhost:3000 in your browser!
 
-👉 Option 2:
-   Double-click "index.html" directly in Google Chrome or Microsoft Edge.
+👉 2. Running on Local Wi-Fi / LAN with 2 Laptops:
+   - Laptop 1 (Backend Server):
+     1. Connect to Wi-Fi / Hotspot.
+     2. Run "ipconfig" in Command Prompt to find its IPv4 address (e.g., 192.168.1.25).
+     3. Start backend: double-click "start-auravision.bat"
+   - Laptop 2 (Client / Judges):
+     1. Connect to the same Wi-Fi / Hotspot.
+     2. Open browser: http://<BACKEND_IP>:3000 (e.g. http://192.168.1.25:3000)
+     3. On the "Connect to AURAVISION Backend" dialog, enter the IP (192.168.1.25) and port 8000.
+     4. Click "Test Connection (GET /api/health)" -> Click "Save & Connect".
 
-No Node.js, Python, or installations required!
+ADDRESSES & PORTS:
+- React Frontend:          http://localhost:3000
+- FastAPI Backend:         http://localhost:8000/api/health
+- WebSocket Event Stream:  ws://localhost:8000/ws/events
+- Live MJPEG Camera Feed:  http://localhost:8000/api/video/feed
+- Legacy Static UI:        http://localhost:8080
 
-FEATURES INCLUDED:
-- AI Human Activity Recognition (HAR) Engine
-- 33-Keypoint MediaPipe Human Skeleton Pose Tracker
-- Chemical SOP Protocol Sequence Validation (Valid, Skipped, Out of Order)
-- Real-Time Voice Audio Guidance & Alerts
-- 6 Interactive Simulation Scenarios (Normal, Skipped Step, Low Conf, etc.)
-- Laboratory-Grade Light Theme with Dark Theme Toggle
+7 MISSION CONTROL SCREENS:
+1. Live Mission (Primary Camera Feed, 6-Step Stepper, HUD, Metrics, Controls)
+2. Overview (KPI Cards, SVG Telemetry Line Chart, Activity Feed)
+3. Experiments (Protocol Builder, Sequence Editor, Integrity Checks)
+4. Sessions & Audit (Filter Tabs, TXT & JSONL Local Export)
+5. AI Models (Neural Pipeline Specs, Hardware Target, Latency Benchmarks)
+6. Demo Mode (5 Fault Injection Scenarios: Normal, Skipped, Out of Order, etc.)
+7. System Settings (Dynamic Server IP & Port, Sensitivity Sliders, Video Source)
 ============================================================
