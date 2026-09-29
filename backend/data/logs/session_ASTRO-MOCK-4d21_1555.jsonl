@@ -1,0 +1,1 @@
+{"timestamp": "2026-09-28T10:14:08Z", "session_id": "1555", "session_code": "ASTRO-MOCK-4d21", "step_number": 3, "action_code": "TAKE_SAMPLE", "result": "STEP_SKIPPED", "confidence": 0.95, "metadata": {"objects": [], "message": "Expected step PICK_TOOL was skipped.", "source": "mock", "scenario": "MISSING_OBJECT", "step_index": 1, "total_steps": 1}}

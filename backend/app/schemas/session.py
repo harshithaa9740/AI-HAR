@@ -10,6 +10,9 @@ class SessionCreate(BaseModel):
     experiment_id: Union[int, str] = Field(..., description="ID of the experiment to run")
     session_uuid: Optional[str] = Field(None, description="Optional custom session UUID or code")
     session_code: Optional[str] = Field(None, description="Legacy alias for session_uuid")
+    session_name: Optional[str] = Field(None, description="Optional human-readable session name")
+    operator_label: Optional[str] = Field("Astronaut Specialist", description="Operator / astronaut identifier")
+    notes: Optional[str] = Field(None, description="Optional session notes")
     stream_enabled: bool = False
 
 
@@ -27,15 +30,19 @@ class SessionResponse(BaseModel):
     id: int
     experiment_id: int
     session_uuid: str
+    session_name: Optional[str] = None
     status: str = "CREATED"
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
     current_step_number: Optional[int] = 1
     current_step_code: Optional[str] = None
     expected_next_step: Optional[str] = None
+    operator_label: Optional[str] = "Astronaut Specialist"
+    notes: Optional[str] = None
     recording_path: Optional[str] = None
     stream_enabled: bool = False
     created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     # Sequence state & completion
     completed: bool = False

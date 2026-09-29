@@ -67,7 +67,10 @@ def create_session(payload: SessionCreate, db: Session = Depends(get_db)):
             db=db,
             experiment_id=payload.experiment_id,
             session_uuid=payload.session_uuid or payload.session_code,
-            stream_enabled=payload.stream_enabled
+            stream_enabled=payload.stream_enabled,
+            session_name=payload.session_name,
+            operator_label=payload.operator_label,
+            notes=payload.notes
         )
         return session
     except ExperimentNotFoundError as e:
@@ -173,9 +176,27 @@ def stop_session(
         video_worker.stop()
 
         if video_summary.get("recording_path"):
-            session.recording_path = video_summary.get("recording_path")
+            rec_path = video_summary.get("recording_path")
+            session.recording_path = rec_path
             db.commit()
             db.refresh(session)
+
+            try:
+                import os
+                from app.db.repository import ArtifactRepository
+                if os.path.exists(rec_path):
+                    ArtifactRepository.create(
+                        db=db,
+                        session_id=session.id,
+                        artifact_type="recording",
+                        file_path=str(rec_path),
+                        file_name=os.path.basename(rec_path),
+                        mime_type="video/mp4",
+                        file_size_bytes=os.path.getsize(rec_path),
+                        metadata={"duration": video_summary.get("duration", 0), "fps": video_summary.get("fps", 30)}
+                    )
+            except Exception as e:
+                logger.error(f"Failed to record session artifact: {e}")
 
         return session
     except SessionNotFoundError as e:
@@ -253,6 +274,21 @@ def get_session_alerts_route(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
+@router.post("/{session_id}/alerts/{alert_id}/acknowledge", response_model=AlertEventResponse)
+def acknowledge_alert_route(
+    session_id: str,
+    alert_id: int,
+    db: Session = Depends(get_db)
+):
+    """Mark an alert event as acknowledged with a timestamp."""
+    session = session_service.get_session(db, session_id)
+    from app.db.repository import acknowledge_alert
+    alert = acknowledge_alert(db, alert_id)
+    if not alert or alert.session_id != session.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Alert {alert_id} not found for session.")
+    return alert
+
+
 @router.get("/{session_id}/detections", response_model=List[DetectionEventResponse])
 def get_session_detections_route(
     session_id: str,
@@ -295,6 +331,28 @@ def get_session_log(
         session = session_service.get_session(db, session_id)
         content = SessionLoggingService.read_log(session.id, session.session_code, format_type=format)
         
+        # Persist log artifact reference in database
+        try:
+            import os
+            from app.db.repository import ArtifactRepository
+            paths = SessionLoggingService.get_log_paths(session.id, session.session_code)
+            log_p = paths["jsonl"] if format == "jsonl" else paths["txt"]
+            if log_p.exists():
+                existing = ArtifactRepository.get_for_session(db, session.id, artifact_type=f"log_{format}")
+                if not existing:
+                    ArtifactRepository.create(
+                        db=db,
+                        session_id=session.id,
+                        artifact_type=f"log_{format}",
+                        file_path=str(log_p),
+                        file_name=log_p.name,
+                        mime_type="application/x-ndjson" if format == "jsonl" else "text/plain",
+                        file_size_bytes=log_p.stat().st_size,
+                        metadata={"format": format}
+                    )
+        except Exception as e:
+            logger.error(f"Failed to record log artifact: {e}")
+
         if download:
             filename = f"session_{session.session_code}.{format}"
             headers = {"Content-Disposition": f"attachment; filename={filename}"}
@@ -306,6 +364,34 @@ def get_session_log(
             log_format=format,
             content=content
         )
+    except SessionNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.get("/{session_id}/artifacts")
+def get_session_artifacts_route(
+    session_id: str,
+    artifact_type: Optional[str] = Query(None, description="Filter by artifact type (recording, log_txt, log_jsonl)"),
+    db: Session = Depends(get_db)
+):
+    """Retrieve all stored artifacts (recordings, audit logs, reports) for a session."""
+    try:
+        session = session_service.get_session(db, session_id)
+        from app.db.repository import ArtifactRepository
+        artifacts = ArtifactRepository.get_for_session(db, session.id, artifact_type=artifact_type)
+        return [
+            {
+                "id": a.id,
+                "session_id": a.session_id,
+                "artifact_type": a.artifact_type,
+                "file_path": a.file_path,
+                "file_name": a.file_name,
+                "mime_type": a.mime_type,
+                "file_size_bytes": a.file_size_bytes,
+                "created_at": a.created_at.isoformat() if a.created_at else None
+            }
+            for a in artifacts
+        ]
     except SessionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
@@ -504,48 +590,26 @@ def infer_session_frame_route(
 
     # 3. Optional Sequence Validation
     if validate:
-        steps = get_steps_for_experiment(db, session.experiment_id)
-        val_res = sequence_validator.validate_observation(
-            observation=obs,
-            session_id=session.id,
-            steps=steps
-        )
-        validation_payload = val_res.model_dump() if hasattr(val_res, "model_dump") else dict(val_res)
+        # Record Detection Event in database if active action
+        if obs.action_code not in (None, "IDLE"):
+            event_service.record_detection_event(
+                db=db,
+                session_id=session.id,
+                entity_type="action",
+                action_code=obs.action_code,
+                confidence=obs.confidence,
+                metadata=obs.metadata
+            )
 
-        # Record Detection Event in database
-        event_service.record_detection_event(
+        from app.services.experiment_service import experiment_service
+        val_res = experiment_service.validate_session_action(
             db=db,
             session_id=session.id,
-            entity_type="action",
             action_code=obs.action_code,
             confidence=obs.confidence,
-            metadata=obs.metadata
+            observed_objects=obs.observed_objects
         )
-
-        # Record Sequence Validation Event in database
-        event_service.record_sequence_event(
-            db=db,
-            session_id=session.id,
-            result=val_res.result,
-            expected_step_number=val_res.expected_step_number,
-            expected_step_code=val_res.expected_step_code,
-            observed_step_number=val_res.expected_step_number if val_res.result == "VALID" else None,
-            observed_step_code=obs.action_code,
-            confidence=obs.confidence,
-            reason=val_res.reason
-        )
-
-        # Sync Session state in DB if step advanced or finished
-        if val_res.result == "VALID":
-            if val_res.next_step_number is not None:
-                session.current_step_number = val_res.next_step_number
-                session.current_step_code = val_res.next_step_code
-                session.expected_next_step = f"{val_res.next_step_code} / {val_res.next_step_name or ''}" if val_res.next_step_code else None
-            if val_res.experiment_complete:
-                session.status = SessionStatus.COMPLETED.value
-                session.ended_at = datetime.now(timezone.utc)
-            db.commit()
-            db.refresh(session)
+        validation_payload = val_res.model_dump() if hasattr(val_res, "model_dump") else dict(val_res)
 
 
     return SessionInferenceResponse(

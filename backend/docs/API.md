@@ -99,8 +99,14 @@ Retrieve chronological sequence validation events.
 ### `GET /api/sessions/{id}/alerts`
 Retrieve all voice/visual alerts generated during session.
 
+### `POST /api/sessions/{id}/alerts/{alert_id}/acknowledge`
+Mark an alert event as acknowledged with timestamp (`acknowledged=true`, `acknowledged_at=UTC`).
+
 ### `GET /api/sessions/{id}/log?format=txt|jsonl&download=false`
 Retrieve or download the session audit log.
+
+### `GET /api/sessions/{id}/artifacts`
+Retrieve all registered artifacts (video recordings, exported logs, snapshots) for a session.
 
 ---
 

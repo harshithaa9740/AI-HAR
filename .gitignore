@@ -4,3 +4,10 @@ __pycache__/
 *.log
 .DS_Store
 Thumbs.db
+.env
+.env.*
+*.env
+backend/.env
+backend/.env.*
+*.db.bak*
+backend/data/recordings/*.mp4

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { Server, CheckCircle2, AlertTriangle, XCircle, RefreshCw, Network, HelpCircle, X } from 'lucide-react';
+import { Server, CheckCircle2, AlertTriangle, XCircle, RefreshCw, HelpCircle, X } from 'lucide-react';
 import { BackendConfigManager } from '../config/backendConfig';
-import { apiService } from '../services/api';
 
 interface ConnectModalProps {
   isOpen: boolean;

@@ -1,0 +1,1 @@
+{"timestamp": "2026-09-28T18:03:18Z", "session_id": "2580", "session_code": "EXP-20260928-180318", "step_number": 2, "action_code": "OPEN_CONTAINER", "result": "STEP_SKIPPED", "confidence": 0.94, "metadata": {"objects": ["container"], "message": "Expected step PICK_TOOL was skipped."}}

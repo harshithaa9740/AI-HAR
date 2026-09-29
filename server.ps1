@@ -20,6 +20,32 @@ $mimeMap = @{
     ".ico"  = "image/x-icon"
 }
 
+# Auto-start FastAPI Backend on Port 8000 if not already running
+try {
+    $backendTest = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue
+    if (-not $backendTest) {
+        $pyCandidates = @(
+            (Join-Path $env:LOCALAPPDATA "Programs\Python\Python311\python.exe"),
+            "python"
+        )
+        $selectedPy = $null
+        foreach ($cand in $pyCandidates) {
+            if ($cand -eq "python") {
+                if (Get-Command python -ErrorAction SilentlyContinue) { $selectedPy = "python"; break }
+            } elseif (Test-Path $cand) {
+                $selectedPy = $cand
+                break
+            }
+        }
+        if ($selectedPy) {
+            Write-Host "Starting AURAVISION FastAPI Backend on http://localhost:8000..." -ForegroundColor Cyan
+            $backendDir = Join-Path $rootDir "backend"
+            Start-Process -FilePath $selectedPy -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000" -WorkingDirectory $backendDir -WindowStyle Hidden
+            Start-Sleep -Seconds 1
+        }
+    }
+} catch {}
+
 # Create HTTP Listener
 $listener = New-Object System.Net.HttpListener
 $prefix = "http://localhost:$Port/"

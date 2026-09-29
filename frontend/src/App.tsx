@@ -16,15 +16,9 @@ import { wsService } from './services/websocketService';
 export const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<NavPageId>('live-mission');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(() => !BackendConfigManager.getConfig().isConfigured);
 
   useEffect(() => {
-    // Check if configured; if not, show ConnectModal on first launch
-    const config = BackendConfigManager.getConfig();
-    if (!config.isConfigured) {
-      setIsConnectModalOpen(true);
-    }
-
     // Connect WebSocket
     wsService.connect();
 

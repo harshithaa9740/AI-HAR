@@ -39,6 +39,18 @@
         <span>AI ENGINE:</span>
         <strong id="aiEngineMode" style="color: var(--accent-cyan);">HYBRID MOCK/EDGE</strong>
       </div>
+      <div class="status-chip" id="backendStatusChip" title="FastAPI Backend Connection (Port 8000)">
+        <span class="pulse-dot" id="backendPulseDot" style="background: #10b981;"></span>
+        <span>BACKEND:</span>
+        <strong id="backendStatusLabel" style="color: #10b981;">FASTAPI CONNECTED (8000)</strong>
+        <a href="http://localhost:8000/docs" target="_blank" style="margin-left: 0.25rem; color: var(--accent-cyan); text-decoration: underline; font-size: 0.72rem;" title="Open Swagger API Docs">API Docs ↗</a>
+      </div>
+      <div class="status-chip" id="supabaseStatusChip" title="Supabase Cloud Live Streaming (dfeqckarjqjnmpwxhuae)">
+        <span class="pulse-dot" id="supabasePulseDot" style="background: #10b981;"></span>
+        <span>SUPABASE:</span>
+        <strong id="supabaseStatusLabel" style="color: #10b981;">LIVE SYNC ACTIVE</strong>
+        <a href="https://supabase.com/dashboard/project/dfeqckarjqjnmpwxhuae/editor" target="_blank" style="margin-left: 0.25rem; color: var(--accent-cyan); text-decoration: underline; font-size: 0.72rem;" title="Open Supabase Table Editor">Tables ↗</a>
+      </div>
       <div class="status-chip">
         <span>SESSION:</span>
         <span id="sessionTimer" style="font-family: var(--font-mono); color: var(--text-main);">00:00:00</span>
@@ -128,12 +140,18 @@
           </svg>
           Perception & Optical Feed
         </div>
-        <div class="source-tabs">
-          <button class="source-tab active" data-source="video" id="tabVideoSource">Sample MP4</button>
-          <button class="source-tab" data-source="synthetic" id="tabSyntheticSource">Vision AI Canvas</button>
-          <button class="source-tab" data-source="webcam" id="tabWebcamSource">Webcam</button>
+        <div class="source-header-controls" style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+          <select id="cameraDeviceSelect" class="camera-device-select" style="display: none;" title="Select Camera Hardware"></select>
+          <div class="source-tabs">
+            <button class="source-tab active" data-source="video" id="tabVideoSource">Sample MP4</button>
+            <button class="source-tab" data-source="synthetic" id="tabSyntheticSource">Vision AI Canvas</button>
+            <button class="source-tab" data-source="webcam" id="tabWebcamSource">Webcam</button>
+          </div>
         </div>
       </div>
+
+      <!-- Camera Alert Banner for Hardware / Permission Status -->
+      <div id="cameraAlertBanner" class="camera-alert-banner" style="display: none;"></div>
 
       <!-- Video Screen & Canvas Overlay -->
       <div class="video-viewport" id="videoViewport">
@@ -522,6 +540,84 @@
 
   </main>
 
+  <!-- Experiment Execution History & Cloud Records Section -->
+  <section class="history-section" id="historySection">
+    <div class="dash-card">
+      <div class="card-header">
+        <div class="card-title">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M12 8v4l3 3"></path>
+            <circle cx="12" cy="12" r="9"></circle>
+          </svg>
+          Experiment Execution History & Cloud Records
+          <span class="badge-tag sih" id="historySyncBadge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981;">☁️ SUPABASE LIVE SYNC</span>
+        </div>
+        <div class="history-controls">
+          <button class="btn btn-secondary" id="btnRefreshHistory" title="Refresh Recent Experiment Sessions">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M23 4v6h-6M1 20v-6h6"></path>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Refresh History
+          </button>
+          <button class="btn btn-primary" id="btnNewExperimentSession" title="Start a fresh real experiment session">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="16"></line>
+              <line x1="8" y1="12" x2="16" y2="12"></line>
+            </svg>
+            New Real Experiment Run
+          </button>
+        </div>
+      </div>
+
+      <!-- Real Sessions Table -->
+      <div class="table-responsive">
+        <table class="history-table" id="sessionsHistoryTable">
+          <thead>
+            <tr>
+              <th>Session ID / Code</th>
+              <th>Protocol / Experiment</th>
+              <th>Status</th>
+              <th>Current Step</th>
+              <th>Operator</th>
+              <th>Started At</th>
+              <th>Cloud Persistence</th>
+              <th>Timeline & Audit</th>
+            </tr>
+          </thead>
+          <tbody id="sessionsTableBody">
+            <tr>
+              <td colspan="8" class="table-loading">Connecting to FastAPI backend & Supabase...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Session Event Inspector Modal / Drawer -->
+  <div class="modal-backdrop" id="sessionEventModal" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span id="modalSessionTitle">Session Events & Audit Records</span>
+          <span class="badge-tag" id="modalSessionStatusBadge">COMPLETED</span>
+        </div>
+        <button class="btn-close" id="btnCloseEventModal" title="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-session-summary" id="modalSessionSummary">
+          <!-- Summary chips populated dynamically -->
+        </div>
+        <div class="modal-timeline" id="modalTimelineList">
+          <!-- Real events populated dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
+

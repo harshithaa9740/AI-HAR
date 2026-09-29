@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import numpy as np
 from app.ml.base_detector import BaseActivityRecognizer
 from app.ml.mock_activity_model import MockActivityModel
-from app.schemas.detection import BoundingBox, PoseResult, ActivityDetection
+from app.schemas.detection import BoundingBox, PoseResult, ActivityDetection, ObservedAction
 from app.core.config import settings
 from app.core.logging import logger
 

@@ -16,7 +16,29 @@ def setup_test_environment():
     init_db()
     with SessionLocal() as db:
         experiment_service.seed_default_experiment_if_empty(db)
+    try:
+        from app.workers.video_worker import video_worker
+        video_worker.stop()
+        from app.services.video_service import video_service
+        video_service.stop_capture()
+        from app.ml.model_registry import ModelRegistry
+        p = ModelRegistry.get_provider("mock")
+        if not p.is_ready():
+            p.initialize()
+    except Exception:
+        pass
     yield
+    try:
+        from app.workers.video_worker import video_worker
+        video_worker.stop()
+        from app.services.video_service import video_service
+        video_service.stop_capture()
+        from app.camera.camera_manager import CameraManagerRegistry
+        CameraManagerRegistry.stop_all()
+        from app.services.realtime_processor import RealTimeProcessorRegistry
+        RealTimeProcessorRegistry.stop_all()
+    except Exception:
+        pass
 
 
 @pytest.fixture

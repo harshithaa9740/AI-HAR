@@ -1,0 +1,1 @@
+{"timestamp": "2026-09-29T09:43:39Z", "session_id": "2961", "session_code": "ASTRO-MOCK-02a1", "step_number": 1, "action_code": "PICK_TOOL", "result": "VALID", "confidence": 0.95, "metadata": {"objects": ["tool"], "message": "Expected step completed. Proceed to Step 2: Open Container.", "source": "mock", "scenario": "NORMAL", "step_index": 1, "total_steps": 5}}

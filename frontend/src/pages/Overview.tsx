@@ -4,10 +4,8 @@ import {
   ShieldCheck,
   Cpu,
   Video,
-  AlertTriangle,
   Clock,
   ArrowRight,
-  TrendingUp,
   Server,
   PlaySquare,
   FlaskConical
@@ -22,16 +20,14 @@ interface OverviewProps {
 
 export const Overview: React.FC<OverviewProps> = ({ onNavigate }) => {
   const [session, setSession] = useState<ExperimentSession>(MOCK_SESSION);
-  const [alerts, setAlerts] = useState<ValidationAlert[]>(MOCK_ALERTS);
+  const [alerts] = useState<ValidationAlert[]>(MOCK_ALERTS);
   const [modelStatus, setModelStatus] = useState<AIModelStatus>(MOCK_MODEL_STATUS);
-  const [recentSessions, setRecentSessions] = useState<ExperimentSession[]>([MOCK_SESSION]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const sessions = await apiService.getSessions();
         if (sessions.length > 0) {
-          setRecentSessions(sessions);
           setSession(sessions[0]);
         }
         const model = await apiService.getActiveModel();

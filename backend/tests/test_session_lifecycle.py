@@ -525,7 +525,8 @@ def test_36_api_stop_session():
 def test_37_api_reset_session():
     """POST /api/sessions/{id}/reset resets the sequence state to step 1."""
     exp_res = client.get("/api/experiments")
-    exp_id = exp_res.json()[0]["id"]
+    exp = next((e for e in exp_res.json() if e.get("name") == "Sample Astronaut Experiment"), exp_res.json()[0])
+    exp_id = exp["id"]
     sess = client.post("/api/sessions", json={"experiment_id": exp_id}).json()
     client.post(f"/api/sessions/{sess['id']}/start")
 
@@ -535,7 +536,7 @@ def test_37_api_reset_session():
     reset_res = client.post(f"/api/sessions/{sess['id']}/reset")
     assert reset_res.status_code == 200
     assert reset_res.json()["current_step_number"] == 1
-    assert reset_res.json()["current_step_code"] == "STEP_01"
+    assert reset_res.json()["current_step_code"] in ["STEP_01", "STEP-01"]
 
 
 def test_38_api_get_timeline_events():

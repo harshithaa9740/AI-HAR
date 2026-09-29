@@ -2,7 +2,7 @@
 SIH Demonstration Scenarios Control Endpoints (Step 5)
 Provides manual step execution, scenario initialization, status tracking, and scenario listing.
 """
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from sqlalchemy.orm import Session
 from app.db.database import get_db, SessionLocal

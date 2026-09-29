@@ -19,7 +19,9 @@ class AlertService:
         alert_type: AlertType,
         severity: AlertSeverity,
         message: str,
-        voice_prompt: Optional[str] = None
+        voice_prompt: Optional[str] = None,
+        category: str = "protocol",
+        validation_event_id: Optional[int] = None
     ) -> AlertResponse:
         """
         Record alert in SQLite, trigger offline local voice TTS, and broadcast via WebSocket.
@@ -39,6 +41,8 @@ class AlertService:
                     alert_type=alert_type.value,
                     severity=severity.value,
                     message=message,
+                    category=category,
+                    validation_event_id=validation_event_id,
                     spoken=spoken
                 )
                 alert_id = db_alert.id

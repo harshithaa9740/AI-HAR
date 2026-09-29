@@ -4,11 +4,8 @@ import {
   Plus,
   Trash2,
   Edit2,
-  Check,
-  X,
   AlertCircle,
   FileCheck,
-  ArrowDown,
   Layers,
   Save,
   RotateCcw

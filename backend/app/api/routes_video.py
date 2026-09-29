@@ -3,12 +3,16 @@ Video Ingestion, Recording, and MJPEG Live Preview Endpoints
 """
 import time
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+import os
+from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 import cv2
+from app.db.database import get_db
 from app.schemas.system import VideoStartRequest, VideoStatusResponse
 from app.services.video_service import video_service
 from app.workers.video_worker import video_worker
+from app.core.logging import logger
 
 router = APIRouter(prefix="/video", tags=["Video Pipeline"])
 
@@ -27,10 +31,34 @@ def start_video(payload: Optional[VideoStartRequest] = None):
 
 
 @router.post("/stop", response_model=VideoStatusResponse)
-def stop_video():
+def stop_video(db: Session = Depends(get_db)):
     """Stop video capture and close active recording file."""
-    video_service.stop_capture()
+    sess_id = video_service.current_session_id
+    video_summary = video_service.stop_capture()
     video_worker.stop()
+
+    rec_path = video_summary.get("recording_path")
+    if sess_id and rec_path and os.path.exists(rec_path):
+        try:
+            from app.db.repository import ArtifactRepository, SessionRepository
+            sess = SessionRepository.get_by_id(db, sess_id)
+            if sess:
+                ArtifactRepository.create(
+                    db=db,
+                    session_id=sess.id,
+                    artifact_type="recording",
+                    file_path=str(rec_path),
+                    file_name=os.path.basename(rec_path),
+                    mime_type="video/mp4",
+                    file_size_bytes=os.path.getsize(rec_path),
+                    metadata={
+                        "duration": video_summary.get("duration_seconds", 0),
+                        "fps": video_summary.get("fps", 30)
+                    }
+                )
+        except Exception as e:
+            logger.error(f"Failed to record session artifact: {e}")
+
     return video_service.get_status()
 
 

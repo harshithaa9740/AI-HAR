@@ -15,6 +15,8 @@ class ExperimentStepBase(BaseModel):
     expected_action: Optional[str] = Field(None, description="Unique action identifier e.g. PICK_TOOL")
     required_objects: Optional[Union[List[str], str]] = Field(default_factory=list, description="List of expected object labels")
     confidence_threshold: float = Field(default=0.70, ge=0.0, le=1.0, description="Minimum detection confidence threshold (0.0 to 1.0)")
+    validation_rules: Optional[Union[dict, str]] = Field(None, description="Optional custom validation constraints")
+    expected_duration_seconds: Optional[int] = Field(None, ge=1, description="Nominal step duration in seconds")
 
     # Backwards compatibility input aliases
     action_code: Optional[str] = Field(None, description="Legacy alias for expected_action")
@@ -46,6 +48,8 @@ class ExperimentStepUpdate(BaseModel):
     expected_action: Optional[str] = None
     required_objects: Optional[Union[List[str], str]] = None
     confidence_threshold: Optional[float] = Field(None, ge=0.0, le=1.0)
+    validation_rules: Optional[Union[dict, str]] = None
+    expected_duration_seconds: Optional[int] = None
 
     # Legacy aliases
     action_code: Optional[str] = None
@@ -91,7 +95,6 @@ class ExperimentCreate(ExperimentBase):
     steps: List[ExperimentStepCreate] = Field(default_factory=list, description="Ordered sequential steps")
 
 
-
 class ExperimentUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
@@ -118,6 +121,8 @@ class ProtocolStepItem(BaseModel):
     expected_action: str
     required_objects: List[str] = Field(default_factory=list)
     confidence_threshold: float = 0.70
+    validation_rules: Optional[Union[dict, str]] = None
+    expected_duration_seconds: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 

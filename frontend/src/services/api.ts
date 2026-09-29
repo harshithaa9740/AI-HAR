@@ -116,7 +116,7 @@ class ApiService {
       const res = await this.fetchWithTimeout(`${BackendConfigManager.getApiBaseUrl()}/experiments`);
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) return data;
+        if (Array.isArray(data)) return data;
       }
     } catch {}
     return MOCK_EXPERIMENTS_LIST;
@@ -195,7 +195,7 @@ class ApiService {
       const res = await this.fetchWithTimeout(`${BackendConfigManager.getApiBaseUrl()}/sessions`);
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) return data;
+        if (Array.isArray(data)) return data;
       }
     } catch {}
     return MOCK_RECENT_SESSIONS;
@@ -310,9 +310,19 @@ class ApiService {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) return data;
+        if (data && Array.isArray(data.events)) {
+          return data.events.map((e: any) => ({
+            id: e.id ? String(e.id) : (e.event_id || `evt-${Math.random()}`),
+            timestamp: e.timestamp || e.created_at || new Date().toISOString(),
+            type: e.event_type || e.result || 'EVENT',
+            message: e.message || e.reason || (e.action_code ? `Action: ${e.action_code}` : 'Event recorded'),
+            severity: (e.severity || 'info').toLowerCase() === 'warning' ? 'warning' : (e.severity || '').toLowerCase() === 'critical' ? 'critical' : (e.result === 'VALID' ? 'valid' : 'info'),
+            category: (e.component || e.category || 'all') as any
+          }));
+        }
       }
     } catch {}
-    return MOCK_AUDIT_LOGS;
+    return [];
   }
 
   async getSessionAlerts(sessionId: string): Promise<ValidationAlert[]> {
@@ -320,20 +330,46 @@ class ApiService {
       const res = await this.fetchWithTimeout(`${BackendConfigManager.getApiBaseUrl()}/sessions/${sessionId}/alerts`);
       if (res.ok) {
         const data = await res.json();
+        if (Array.isArray(data)) {
+          return data.map((a: any) => ({
+            id: String(a.id),
+            timestamp: a.timestamp || a.created_at || new Date().toISOString(),
+            type: a.alert_type || 'ALERT',
+            title: a.alert_type || 'Alert',
+            message: a.message,
+            severity: (a.severity || 'warning').toLowerCase(),
+            step_number: a.step_number || undefined,
+            acknowledged: a.acknowledged || false
+          }));
+        }
+      }
+    } catch {}
+    return [];
+  }
+
+  async acknowledgeAlert(sessionId: string, alertId: number | string): Promise<any> {
+    try {
+      const res = await this.fetchWithTimeout(
+        `${BackendConfigManager.getApiBaseUrl()}/sessions/${sessionId}/alerts/${alertId}/acknowledge`,
+        { method: 'POST' }
+      );
+      if (res.ok) return await res.json();
+    } catch {}
+    return { id: alertId, acknowledged: true };
+  }
+
+  async getSessionArtifacts(sessionId: string, artifactType?: string): Promise<any[]> {
+    try {
+      const query = artifactType ? `?artifact_type=${encodeURIComponent(artifactType)}` : '';
+      const res = await this.fetchWithTimeout(
+        `${BackendConfigManager.getApiBaseUrl()}/sessions/${sessionId}/artifacts${query}`
+      );
+      if (res.ok) {
+        const data = await res.json();
         if (Array.isArray(data)) return data;
       }
     } catch {}
-    return [
-      {
-        id: 'alt-01',
-        timestamp: '14:04:15.340',
-        type: 'VALID',
-        title: 'Step 1 Validated',
-        message: 'Pick tool verified with 96% confidence.',
-        severity: 'valid',
-        step_number: 1
-      }
-    ];
+    return [];
   }
 
   async getSessionSequenceEvents(sessionId: string): Promise<AuditLogItem[]> {

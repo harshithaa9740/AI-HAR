@@ -10,15 +10,10 @@ import {
   Clock,
   Shield,
   Activity,
-  Layers,
-  ChevronRight,
-  Video,
-  VideoOff,
   Crosshair,
   Volume2,
   VolumeX,
-  Sparkles,
-  Info
+  Sparkles
 } from 'lucide-react';
 import { BackendConfigManager } from '../config/backendConfig';
 import { apiService } from '../services/api';
@@ -28,7 +23,6 @@ import type {
   ExperimentSession,
   LiveTelemetry,
   ValidationAlert,
-  AuditLogItem,
   ProtocolStep
 } from '../types';
 import { MOCK_PROTOCOL, MOCK_SESSION, MOCK_TELEMETRY, MOCK_ALERTS } from '../services/mockData';
@@ -38,7 +32,6 @@ export const LiveMission: React.FC = () => {
   const [session, setSession] = useState<ExperimentSession>(MOCK_SESSION);
   const [telemetry, setTelemetry] = useState<LiveTelemetry>(MOCK_TELEMETRY);
   const [alerts, setAlerts] = useState<ValidationAlert[]>(MOCK_ALERTS);
-  const [auditLog, setAuditLog] = useState<AuditLogItem[]>([]);
   const [elapsedSeconds, setElapsedSeconds] = useState(148);
   const [videoFeedError, setVideoFeedError] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(true);
@@ -63,11 +56,6 @@ export const LiveMission: React.FC = () => {
         const sessions = await apiService.getSessions();
         if (mounted && sessions.length > 0) {
           setSession(sessions[0]);
-        }
-
-        const events = await apiService.getSessionEvents(MOCK_SESSION.id);
-        if (mounted && events.length > 0) {
-          setAuditLog(events);
         }
       } catch (err) {
         console.warn('Using offline mock dataset for mission view:', err);

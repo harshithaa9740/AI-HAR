@@ -2,7 +2,7 @@
 ML Model Factory & Provider for AURAVISION
 Instantiates Activity Recognizer, Object Detector, and Pose Estimator based on system AI_MODE configuration.
 """
-from typing import Optional
+from typing import Optional, Any
 from app.core.config import settings
 from app.ml.base_detector import BaseObjectDetector, BasePoseEstimator, BaseActivityRecognizer
 from app.ml.mock_detector import MockDetector, MockPoseEstimator

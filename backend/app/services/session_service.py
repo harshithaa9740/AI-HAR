@@ -16,6 +16,7 @@ from app.db.repository import (
     update_session,
     get_steps_for_experiment,
     get_experiment,
+    sync_session_to_cloud,
 )
 from app.core.constants import SessionStatus, EventType, AlertSeverity
 from app.services.event_service import event_service
@@ -109,7 +110,10 @@ class SessionService:
         db: Session,
         experiment_id: Union[int, str],
         session_uuid: Optional[str] = None,
-        stream_enabled: bool = False
+        stream_enabled: bool = False,
+        session_name: Optional[str] = None,
+        operator_label: Optional[str] = "Astronaut Specialist",
+        notes: Optional[str] = None
     ) -> models.ExperimentSession:
         """
         Create a new experiment execution session in CREATED status:
@@ -133,11 +137,18 @@ class SessionService:
         expected_next = f"{first_step.step_code} / {first_step.expected_action}" if first_step else None
 
         uuid_str = session_uuid or models.generate_uuid()
+        if session_uuid:
+            existing = SessionRepository.get_by_uuid(db, uuid_str)
+            if existing:
+                return existing
 
         session = SessionRepository.create(
             db=db,
             experiment_id=exp.id,
             session_uuid=uuid_str,
+            session_name=session_name,
+            operator_label=operator_label,
+            notes=notes,
             status=SessionStatus.CREATED.value,
             stream_enabled=stream_enabled,
             current_step_number=1,
@@ -162,13 +173,25 @@ class SessionService:
         logger.info(f"Session {session.id} ({session.session_uuid}) created for experiment {exp.id}.")
         return session
 
-    @staticmethod
-    def get_session(db: Session, session_id: Union[int, str]) -> models.ExperimentSession:
-        """Retrieve an ExperimentSession by ID or UUID, or raise SessionNotFoundError."""
+    @classmethod
+    def get_session(cls, db: Session, session_id: Union[int, str]) -> models.ExperimentSession:
+        """Retrieve an ExperimentSession by ID or UUID, or auto-create if a valid session code is requested."""
         session = get_session(db, session_id)
         if not session:
+            if isinstance(session_id, str) and (session_id.startswith("sess-") or session_id.startswith("ORBITAL-")):
+                exp = db.query(models.Experiment).filter(models.Experiment.is_active == True).first()
+                if exp:
+                    return cls.create_session(
+                        db=db,
+                        experiment_id=exp.id,
+                        session_uuid=session_id,
+                        session_name=f"Session {session_id}",
+                        operator_label="Astronaut Specialist",
+                        notes="Auto-initialized mission execution session"
+                    )
             raise SessionNotFoundError(f"Session '{session_id}' not found.")
         return session
+
 
     @staticmethod
     def list_sessions(
@@ -194,9 +217,13 @@ class SessionService:
         Start an experiment session (CREATED -> RUNNING):
         - If session_id is provided, transition existing session.
         - If experiment_id is provided, create and immediately start session.
+        - Idempotent: repeated start on an already RUNNING session safely returns the active session.
         """
         if session_id is not None:
             session = cls.get_session(db, session_id)
+            if session.status == SessionStatus.RUNNING.value:
+                # Idempotent re-request
+                return session
             if session.status != SessionStatus.CREATED.value:
                 raise InvalidStateTransitionError(
                     current_status=session.status,
@@ -207,7 +234,16 @@ class SessionService:
         else:
             if experiment_id is None:
                 raise ValueError("Must provide either session_id or experiment_id to start a session.")
-            session = cls.create_session(db, experiment_id=experiment_id, session_uuid=session_code)
+            if session_code:
+                existing = SessionRepository.get_by_uuid(db, session_code)
+                if existing:
+                    if existing.status == SessionStatus.RUNNING.value:
+                        return existing
+                    session = existing
+                else:
+                    session = cls.create_session(db, experiment_id=experiment_id, session_uuid=session_code)
+            else:
+                session = cls.create_session(db, experiment_id=experiment_id, session_uuid=session_code)
 
         steps = get_steps_for_experiment(db, session.experiment_id)
         first_step = steps[0] if steps else None
@@ -222,6 +258,7 @@ class SessionService:
         session.expected_next_step = expected_next
         db.commit()
         db.refresh(session)
+        sync_session_to_cloud(session)
 
         # Initialize sequence validator memory state
         sequence_validator.init_session_state(
@@ -256,6 +293,8 @@ class SessionService:
     ) -> models.ExperimentSession:
         """Pause a running experiment session (RUNNING -> PAUSED). Sequence state is preserved."""
         session = cls.get_session(db, session_id)
+        if session.status == SessionStatus.PAUSED.value:
+            return session
         if session.status != SessionStatus.RUNNING.value:
             raise InvalidStateTransitionError(
                 current_status=session.status,
@@ -267,6 +306,7 @@ class SessionService:
         session.status = SessionStatus.PAUSED.value
         db.commit()
         db.refresh(session)
+        sync_session_to_cloud(session)
 
         # Pause session camera if active
         cam_mgr = CameraManagerRegistry.get_for_session(str(session.id))
@@ -296,6 +336,8 @@ class SessionService:
     ) -> models.ExperimentSession:
         """Resume a paused experiment session (PAUSED -> RUNNING). Sequence state is preserved."""
         session = cls.get_session(db, session_id)
+        if session.status == SessionStatus.RUNNING.value:
+            return session
         if session.status != SessionStatus.PAUSED.value:
             raise InvalidStateTransitionError(
                 current_status=session.status,
@@ -304,9 +346,11 @@ class SessionService:
             )
         cls._validate_transition(session.status, SessionStatus.RUNNING.value)
 
+
         session.status = SessionStatus.RUNNING.value
         db.commit()
         db.refresh(session)
+        sync_session_to_cloud(session)
 
         # Resume session camera if paused
         cam_mgr = CameraManagerRegistry.get_for_session(str(session.id))
@@ -343,6 +387,7 @@ class SessionService:
         session.ended_at = now
         db.commit()
         db.refresh(session)
+        sync_session_to_cloud(session)
 
         # Stop and release session camera if active
         cam_mgr = CameraManagerRegistry.get_for_session(str(session.id))
@@ -408,6 +453,7 @@ class SessionService:
         session.ended_at = now
         db.commit()
         db.refresh(session)
+        sync_session_to_cloud(session)
 
         # Stop and release session camera if active
         cam_mgr = CameraManagerRegistry.get_for_session(str(session.id))
@@ -529,6 +575,11 @@ class SessionService:
             current_step_number=1,
             completed=False
         )
+        try:
+            from app.services.experiment_service import experiment_service
+            experiment_service.clear_session_alert_cache(session.id)
+        except Exception:
+            pass
 
         event_service.record_system_event(
             db=db,

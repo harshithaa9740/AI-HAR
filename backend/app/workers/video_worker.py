@@ -10,7 +10,7 @@ from app.services.detection_service import detection_service
 from app.services.experiment_service import experiment_service
 from app.services.websocket_service import ws_manager
 from app.db.database import SessionLocal
-from app.db.repository import EventRepository
+from app.db.repository import EventRepository, SessionRepository
 from app.core.constants import EventType
 from app.core.logging import logger
 
@@ -22,6 +22,8 @@ class VideoWorker:
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self.fps = 10  # Inference loop rate (10 fps)
+        self._last_detection_action: Optional[str] = None
+        self._last_detection_time: float = 0.0
 
     def start(self, session_id: Optional[str] = None):
         if self.is_running:
@@ -68,31 +70,55 @@ class VideoWorker:
                     # Check Activity
                     activity = ai_results.get("activity")
                     if activity and activity.get("action") not in (None, "IDLE"):
+                        action_code = activity["action"]
+                        confidence = activity.get("confidence", 0.0)
+
                         ws_manager.broadcast_sync(
                             event_type=EventType.ACTIVITY.value,
                             data=activity,
                             session_id=self.active_session_id
                         )
 
-                        # If an active session is running, validate against experiment sequence
-                        if self.active_session_id:
+                        # Debounce / sampling: avoid writing every frame of continuous identical action
+                        now = time.time()
+                        should_persist = (
+                            action_code != self._last_detection_action
+                            or (now - self._last_detection_time) >= 1.0
+                        )
+
+                        if should_persist:
+                            self._last_detection_action = action_code
+                            self._last_detection_time = now
+
                             with SessionLocal() as db:
-                                sess = SessionRepository.get_by_id(db, self.active_session_id)
-                                if sess and sess.status == "RUNNING":
-                                    experiment_service.validate_session_action(
-                                        db=db,
-                                        session_id=self.active_session_id,
-                                        action_code=activity["action"],
-                                        confidence=activity["confidence"],
-                                        observed_objects=activity.get("objects", [])
-                                    )
-                                    # Also record detection event
+                                if self.active_session_id:
+                                    sess = SessionRepository.get_by_id(db, self.active_session_id)
+                                    if sess and sess.status == "RUNNING":
+                                        # Validate action against protocol sequence
+                                        experiment_service.validate_session_action(
+                                            db=db,
+                                            session_id=self.active_session_id,
+                                            action_code=action_code,
+                                            confidence=confidence,
+                                            observed_objects=activity.get("objects", [])
+                                        )
+                                        # Record detection event associated with active session
+                                        EventRepository.record_detection(
+                                            db=db,
+                                            session_id=self.active_session_id,
+                                            event_type="ACTIVITY_RECOGNITION",
+                                            action_code=action_code,
+                                            confidence=confidence,
+                                            metadata_json=activity
+                                        )
+                                else:
+                                    # Explicitly handle detections when no session is active without assigning to an unrelated session
                                     EventRepository.record_detection(
                                         db=db,
-                                        session_id=self.active_session_id,
+                                        session_id=None,
                                         event_type="ACTIVITY_RECOGNITION",
-                                        action_code=activity["action"],
-                                        confidence=activity["confidence"],
+                                        action_code=action_code,
+                                        confidence=confidence,
                                         metadata_json=activity
                                     )
 

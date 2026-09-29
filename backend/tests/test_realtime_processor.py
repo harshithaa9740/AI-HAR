@@ -275,7 +275,8 @@ def test_processor_frame_inference_and_step_progression():
         time.sleep(0.05)
         with SessionLocal() as db:
             sess = session_service.get_session(db, sess_id)
-            if sess.current_step_number >= 2:
+            st = processor.status()
+            if sess.current_step_number >= 2 and st.get("frames_processed", 0) >= 1:
                 advanced = True
                 break
 
@@ -299,13 +300,13 @@ def test_processor_experiment_completion_flow():
     processor = RealTimeProcessor(session_id=sess_id, target_fps=30)
     processor.start()
 
-    # Wait for sequence to complete
+    # Wait for sequence and processor to complete
     completed = False
     for _ in range(60):
         time.sleep(0.05)
         with SessionLocal() as db:
             sess = session_service.get_session(db, sess_id)
-            if sess.status == SessionStatus.COMPLETED.value:
+            if sess.status == SessionStatus.COMPLETED.value and processor.state == ProcessingState.STOPPED:
                 completed = True
                 break
 
@@ -323,6 +324,7 @@ def test_processor_experiment_completion_flow():
 
 
 
+
 def test_processor_step_skipped_does_not_advance_protocol():
     """Test that STEP_SKIPPED preserves validator state without illegally advancing protocol."""
     sess_id, exp_id = _create_and_start_test_session()
@@ -336,7 +338,10 @@ def test_processor_step_skipped_does_not_advance_protocol():
     processor = RealTimeProcessor(session_id=sess_id, target_fps=20)
     processor.start()
 
-    time.sleep(0.3)
+    for _ in range(30):
+        time.sleep(0.05)
+        if processor.get_metrics()["validation_results"]["STEP_SKIPPED"] >= 1:
+            break
     processor.stop()
 
     metrics = processor.get_metrics()
@@ -371,7 +376,10 @@ def test_processor_inference_error_isolation():
 
     try:
         processor.start()
-        time.sleep(0.3)
+        for _ in range(30):
+            time.sleep(0.05)
+            if processor.get_metrics()["successful_inferences"] >= 1:
+                break
         processor.stop()
 
         metrics = processor.get_metrics()

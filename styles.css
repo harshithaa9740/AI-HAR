@@ -547,6 +547,44 @@ body {
   box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35);
 }
 
+.camera-device-select {
+  background: var(--bg-tertiary);
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.28rem 0.5rem;
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  outline: none;
+  cursor: pointer;
+  max-width: 170px;
+  transition: border-color 0.2s;
+}
+.camera-device-select:focus {
+  border-color: var(--accent-cyan);
+}
+
+.camera-alert-banner {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.75rem;
+  margin-bottom: 0.65rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  line-height: 1.4;
+  animation: fadeIn 0.2s ease-in-out;
+}
+[data-theme="dark"] .camera-alert-banner {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
 /* Telemetry Grid */
 .telemetry-row {
   display: grid;
@@ -1107,3 +1145,252 @@ body {
   0%, 100% { transform: scaleY(0.3); }
   50% { transform: scaleY(1); }
 }
+
+/* ========================================================
+   Experiment Execution History & Cloud Records Table
+   ======================================================== */
+.history-section {
+  max-width: 1440px;
+  margin: 1.5rem auto 0;
+  padding: 0 1.5rem;
+}
+
+.history-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  margin-top: 0.75rem;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.82rem;
+}
+
+.history-table th {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.history-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  vertical-align: middle;
+}
+
+.history-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.history-table tbody tr:hover {
+  background-color: var(--step-active-bg);
+}
+
+.history-table tbody tr.active-row {
+  border-left: 3px solid var(--accent-cyan);
+  background-color: var(--step-active-bg);
+}
+
+.history-table .session-id-cell {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--accent-cyan);
+}
+
+.history-table .table-loading {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.status-badge.running {
+  background: rgba(2, 132, 199, 0.12);
+  color: var(--accent-cyan);
+  border: 1px solid var(--accent-cyan);
+}
+
+.status-badge.completed {
+  background: rgba(5, 150, 105, 0.12);
+  color: var(--accent-emerald);
+  border: 1px solid var(--accent-emerald);
+}
+
+.status-badge.stopped {
+  background: rgba(217, 119, 6, 0.12);
+  color: var(--accent-amber);
+  border: 1px solid var(--accent-amber);
+}
+
+.status-badge.violation, .status-badge.error {
+  background: rgba(225, 29, 72, 0.12);
+  color: var(--accent-rose);
+  border: 1px solid var(--accent-rose);
+}
+
+.status-badge.created {
+  background: rgba(100, 116, 139, 0.12);
+  color: var(--text-dim);
+  border: 1px solid var(--border-subtle);
+}
+
+.cloud-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--accent-emerald);
+  background: rgba(5, 150, 105, 0.08);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(5, 150, 105, 0.25);
+}
+
+/* Modal Backdrop & Dialog */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.modal-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  width: 100%;
+  max-width: 800px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slide-in 0.2s ease-out;
+}
+
+.modal-header {
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.modal-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.btn-close:hover {
+  color: var(--text-main);
+  background: var(--bg-tertiary);
+}
+
+.modal-body {
+  padding: 1.25rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.modal-session-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+
+.modal-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.modal-timeline-item {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.6rem 0.85rem;
+  background: var(--bg-secondary);
+  border-left: 3px solid var(--accent-cyan);
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.modal-timeline-item.valid { border-left-color: var(--accent-emerald); }
+.modal-timeline-item.alert { border-left-color: var(--accent-rose); }
+.modal-timeline-item.warning { border-left-color: var(--accent-amber); }
+
+.modal-timeline-time {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.modal-timeline-content {
+  flex: 1;
+}
+
+.modal-timeline-type {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  margin-bottom: 0.15rem;
+}
+

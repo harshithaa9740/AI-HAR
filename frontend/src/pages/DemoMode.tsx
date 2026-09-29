@@ -3,17 +3,12 @@ import {
   PlaySquare,
   Play,
   Square,
-  CheckCircle,
-  AlertTriangle,
-  AlertOctagon,
-  HelpCircle,
   Sparkles,
   Gauge,
-  RotateCcw,
   Zap
 } from 'lucide-react';
 import { apiService } from '../services/api';
-import type { DemoScenarioType, DemoScenarioDefinition } from '../types';
+import type { DemoScenarioType } from '../types';
 import { MOCK_DEMO_SCENARIOS } from '../services/mockData';
 
 export const DemoMode: React.FC = () => {

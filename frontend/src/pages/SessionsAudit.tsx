@@ -2,14 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   ClipboardList,
   Download,
-  Filter,
   Search,
   CheckCircle,
   AlertTriangle,
   AlertOctagon,
   Info,
-  Calendar,
-  Clock,
   FileText
 } from 'lucide-react';
 import { apiService } from '../services/api';
@@ -28,9 +25,13 @@ export const SessionsAudit: React.FC = () => {
     const fetchSessions = async () => {
       try {
         const list = await apiService.getSessions();
-        if (list.length > 0) {
+        if (list && list.length > 0) {
           setSessions(list);
           setSelectedSessionId(list[0].id);
+        } else if (list && list.length === 0) {
+          setSessions([]);
+          setSelectedSessionId('');
+          setLogs([]);
         }
       } catch {
         // Fallback to mock
@@ -41,6 +42,10 @@ export const SessionsAudit: React.FC = () => {
 
   useEffect(() => {
     const fetchLogs = async () => {
+      if (!selectedSessionId) {
+        setLogs([]);
+        return;
+      }
       setIsLoading(true);
       try {
         let events: AuditLogItem[] = [];
@@ -63,13 +68,9 @@ export const SessionsAudit: React.FC = () => {
         } else if (activeTab === 'system') {
           events = await apiService.getSessionSystemEvents(selectedSessionId);
         }
-        if (events && events.length > 0) {
-          setLogs(events);
-        } else {
-          setLogs(MOCK_AUDIT_LOGS.filter((item) => activeTab === 'all' || item.category === activeTab));
-        }
+        setLogs(events || []);
       } catch {
-        setLogs(MOCK_AUDIT_LOGS.filter((item) => activeTab === 'all' || item.category === activeTab));
+        setLogs([]);
       } finally {
         setIsLoading(false);
       }
@@ -161,46 +162,52 @@ export const SessionsAudit: React.FC = () => {
         <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <h3 style={{ fontSize: '14px', color: '#fff', margin: 0 }}>Mission Sessions</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {sessions.map((ses) => {
-              const isSelected = ses.id === selectedSessionId;
-              return (
-                <div
-                  key={ses.id}
-                  onClick={() => setSelectedSessionId(ses.id)}
-                  style={{
-                    padding: '12px',
-                    borderRadius: 'var(--radius-md)',
-                    background: isSelected ? 'rgba(0, 229, 255, 0.1)' : 'rgba(255, 255, 255, 0.02)',
-                    border: `1px solid ${isSelected ? 'var(--cyan)' : 'var(--border-subtle)'}`,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong className="font-mono" style={{ fontSize: '13px', color: isSelected ? 'var(--cyan)' : '#fff' }}>
-                      {ses.session_code}
-                    </strong>
-                    <span
-                      className={`badge ${
-                        ses.status === 'RUNNING'
-                          ? 'badge-valid'
-                          : ses.status === 'PAUSED'
-                          ? 'badge-warning'
-                          : 'badge-muted'
-                      }`}
-                      style={{ fontSize: '9px' }}
-                    >
-                      {ses.status}
-                    </span>
-                  </div>
+            {sessions.length === 0 ? (
+              <div style={{ padding: '24px 12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                No mission sessions recorded yet. Start a session from Live Mission to begin recording.
+              </div>
+            ) : (
+              sessions.map((ses) => {
+                const isSelected = ses.id === selectedSessionId;
+                return (
+                  <div
+                    key={ses.id}
+                    onClick={() => setSelectedSessionId(ses.id)}
+                    style={{
+                      padding: '12px',
+                      borderRadius: 'var(--radius-md)',
+                      background: isSelected ? 'rgba(0, 229, 255, 0.1)' : 'rgba(255, 255, 255, 0.02)',
+                      border: `1px solid ${isSelected ? 'var(--cyan)' : 'var(--border-subtle)'}`,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong className="font-mono" style={{ fontSize: '13px', color: isSelected ? 'var(--cyan)' : '#fff' }}>
+                        {ses.session_code}
+                      </strong>
+                      <span
+                        className={`badge ${
+                          ses.status === 'RUNNING'
+                            ? 'badge-valid'
+                            : ses.status === 'PAUSED'
+                            ? 'badge-warning'
+                            : 'badge-muted'
+                        }`}
+                        style={{ fontSize: '9px' }}
+                      >
+                        {ses.status}
+                      </span>
+                    </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)', marginTop: 6 }}>
-                    <span>Step {ses.current_step_number}</span>
-                    <span style={{ color: 'var(--valid)' }}>{ses.compliance_rate || 96}% Compliance</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)', marginTop: 6 }}>
+                      <span>Step {ses.current_step_number}</span>
+                      <span style={{ color: 'var(--valid)' }}>{ses.compliance_rate || 96}% Compliance</span>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -243,7 +250,11 @@ export const SessionsAudit: React.FC = () => {
 
           {/* Table / Event Stream */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '520px', overflowY: 'auto' }}>
-            {filteredLogs.length === 0 ? (
+            {isLoading ? (
+              <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                Loading audit events...
+              </div>
+            ) : filteredLogs.length === 0 ? (
               <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
                 No audit events recorded under this filter.
               </div>

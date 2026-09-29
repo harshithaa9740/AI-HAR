@@ -2,13 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   Cpu,
   Zap,
-  Activity,
   CheckCircle,
-  Sliders,
-  Gauge,
-  Layers,
-  Sparkles,
-  Server
+  Sliders
 } from 'lucide-react';
 import { apiService } from '../services/api';
 import type { AIModelStatus } from '../types';

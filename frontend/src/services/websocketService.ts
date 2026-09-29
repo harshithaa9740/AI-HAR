@@ -66,7 +66,7 @@ class WebSocketService {
         try {
           const parsed: WSEventMessage = JSON.parse(event.data);
           this.notifyMessageListeners(parsed);
-        } catch (err) {
+        } catch {
           console.warn('[AURAVISION WS] Non-JSON message received:', event.data);
           this.notifyMessageListeners({ type: 'RAW_TEXT', data: event.data });
         }
@@ -84,7 +84,7 @@ class WebSocketService {
           this.scheduleReconnect();
         }
       };
-    } catch (err) {
+    } catch {
       this.setStatus('disconnected');
       if (!this.isIntentionallyClosed) {
         this.scheduleReconnect();

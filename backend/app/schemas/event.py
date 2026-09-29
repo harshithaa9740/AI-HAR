@@ -14,8 +14,11 @@ def utc_now() -> datetime:
 class DetectionEventResponse(BaseModel):
     id: int
     session_id: Optional[int] = None
+    protocol_step_id: Optional[int] = None
     timestamp: datetime
     frame_number: Optional[int] = None
+    start_time_ms: Optional[float] = None
+    end_time_ms: Optional[float] = None
     entity_type: str
     entity_name: str
     confidence: Optional[float] = None
@@ -29,6 +32,8 @@ class DetectionEventResponse(BaseModel):
 class SequenceEventResponse(BaseModel):
     id: int
     session_id: Optional[int] = None
+    protocol_step_id: Optional[int] = None
+    event_type: Optional[str] = None
     timestamp: datetime
     expected_step_number: Optional[int] = None
     expected_step_code: Optional[str] = None
@@ -45,11 +50,14 @@ class SequenceEventResponse(BaseModel):
 class AlertEventResponse(BaseModel):
     id: int
     session_id: Optional[int] = None
+    validation_event_id: Optional[int] = None
     timestamp: datetime
     alert_type: str
     severity: str = "INFO"
+    category: str = "protocol"
     message: str
     acknowledged: bool = False
+    acknowledged_at: Optional[datetime] = None
     spoken: bool = False
     metadata_json: Optional[Union[Dict[str, Any], str]] = "{}"
 
@@ -58,6 +66,7 @@ class AlertEventResponse(BaseModel):
 
 class SystemEventResponse(BaseModel):
     id: int
+    session_id: Optional[int] = None
     timestamp: datetime
     event_type: str
     severity: str = "INFO"
@@ -81,6 +90,8 @@ class SequenceValidationResponse(BaseModel):
     completed: bool = False
 
     # Legacy/compatibility fields
+    session_id: Optional[int] = None
+    cloud_synced: Optional[bool] = True
     current_step: Optional[int] = None
     completed_step: Optional[int] = None
     expected_step: Optional[int] = None
@@ -119,11 +130,14 @@ class SequenceValidationResponse(BaseModel):
 class AlertResponse(BaseModel):
     id: Optional[Union[int, str]] = None
     session_id: Optional[Union[int, str]] = None
+    validation_event_id: Optional[int] = None
     alert_type: str
     severity: str
+    category: str = "protocol"
     message: str
     spoken: bool = False
     acknowledged: bool = False
+    acknowledged_at: Optional[datetime] = None
     timestamp: datetime = Field(default_factory=utc_now)
 
 

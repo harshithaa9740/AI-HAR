@@ -5,13 +5,8 @@ import {
   RefreshCw,
   Save,
   CheckCircle,
-  AlertTriangle,
-  Volume2,
-  Video,
   Database,
-  Sliders,
-  Radio,
-  ShieldCheck
+  Sliders
 } from 'lucide-react';
 import { BackendConfigManager } from '../config/backendConfig';
 import { apiService } from '../services/api';
@@ -28,8 +23,6 @@ export const SystemSettings: React.FC = () => {
   const [recordingEnabled, setRecordingEnabled] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [logLevel, setLogLevel] = useState<'DEBUG' | 'INFO' | 'WARNING' | 'ERROR'>('INFO');
-  const [streamingIp, setStreamingIp] = useState('0.0.0.0');
-  const [streamingPort, setStreamingPort] = useState('8000');
 
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ status: 'idle' | 'success' | 'error'; message: string }>({
@@ -87,7 +80,7 @@ export const SystemSettings: React.FC = () => {
           message: `Server returned error status ${res.status}.`,
         });
       }
-    } catch (err: any) {
+    } catch {
       setTestResult({
         status: 'error',
         message: `Unable to connect to ${testUrl}. Check LAN / Wi-Fi IP address.`,
@@ -118,8 +111,8 @@ export const SystemSettings: React.FC = () => {
       recording_enabled: recordingEnabled,
       voice_enabled: voiceEnabled,
       log_level: logLevel,
-      streaming_ip: streamingIp,
-      streaming_port: parseInt(streamingPort, 10) || 8000,
+      streaming_ip: backendIp.trim(),
+      streaming_port: portNum,
     };
 
     try {

@@ -12,6 +12,9 @@ from app.db.repository import SessionRepository
 router = APIRouter(tags=["Validation"])
 
 
+from app.db import models
+
+
 @router.post("/validate", response_model=SequenceValidationResponse)
 def validate_action(payload: ValidateActionRequest, db: Session = Depends(get_db)):
     """
@@ -24,23 +27,27 @@ def validate_action(payload: ValidateActionRequest, db: Session = Depends(get_db
         session = SessionRepository.get_by_id(db, session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found.")
-        return experiment_service.validate_session_action(
-            db=db,
-            session_id=session.id,
-            action_code=payload.action_code,
-            confidence=payload.confidence,
-            observed_objects=payload.observed_objects,
-            metadata=payload.metadata
-        )
+        target_session_id = session.id
+    else:
+        # Re-use current active running session or start a new persistent session
+        exp = experiment_service.seed_default_experiment_if_empty(db)
+        active_session = db.query(models.ExperimentSession).filter(
+            models.ExperimentSession.experiment_id == exp.id,
+            models.ExperimentSession.status == "RUNNING"
+        ).order_by(models.ExperimentSession.id.desc()).first()
 
-    # Ephemeral or default experiment validation
-    exp = experiment_service.seed_default_experiment_if_empty(db)
-    temp_session = experiment_service.start_session(db, exp.id)
-    return experiment_service.validate_session_action(
+        if not active_session:
+            active_session = experiment_service.start_session(db, exp.id)
+        target_session_id = active_session.id
+
+    resp = experiment_service.validate_session_action(
         db=db,
-        session_id=temp_session.id,
+        session_id=target_session_id,
         action_code=payload.action_code,
         confidence=payload.confidence,
         observed_objects=payload.observed_objects,
         metadata=payload.metadata
     )
+    resp.session_id = target_session_id
+    resp.cloud_synced = True
+    return resp

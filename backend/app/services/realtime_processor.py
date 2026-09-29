@@ -71,7 +71,7 @@ class RealTimeProcessor:
 
         self.metrics = ProcessingMetrics()
         self._state: ProcessingState = ProcessingState.STOPPED
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._pause_event = threading.Event()
@@ -80,6 +80,8 @@ class RealTimeProcessor:
         self._last_error: Optional[str] = None
         self._last_processed_frame_id: Optional[str] = None
         self._last_processed_frame_index: Optional[int] = None
+        self._last_recorded_action: Optional[str] = None
+        self._last_recorded_action_time: float = 0.0
 
     @property
     def state(self) -> ProcessingState:
@@ -237,7 +239,8 @@ class RealTimeProcessor:
         self._pause_event.clear()
 
         if self._thread is not None and self._thread.is_alive():
-            self._thread.join(timeout=2.0)
+            if threading.current_thread() != self._thread:
+                self._thread.join(timeout=2.0)
             self._thread = None
 
         with self._lock:
@@ -345,53 +348,58 @@ class RealTimeProcessor:
                             break
 
                     steps = get_steps_for_experiment(db, sess.experiment_id)
-                    val_res = self.sequence_validator.validate_observation(
-                        observation=obs,
-                        session_id=sess.id,
-                        steps=steps
+
+                    action_code = obs.action_code
+                    confidence = obs.confidence or 0.0
+                    is_active_action = action_code not in (None, "IDLE")
+
+                    # Avoid spamming database on every frame:
+                    # Persist detection & sequence event only for active non-idle actions
+                    # when the action changes or after 1.0 second has elapsed.
+                    now_ts = time.perf_counter()
+                    should_persist_event = is_active_action and (
+                        action_code != self._last_recorded_action
+                        or (now_ts - self._last_recorded_action_time) >= 1.0
                     )
 
-                    # Record Detection Event in DB
-                    event_service.record_detection_event(
-                        db=db,
-                        session_id=sess.id,
-                        entity_type="action",
-                        action_code=obs.action_code,
-                        confidence=obs.confidence,
-                        metadata=obs.metadata
-                    )
+                    if should_persist_event:
+                        self._last_recorded_action = action_code
+                        self._last_recorded_action_time = now_ts
 
-                    # Record Sequence Validation Event in DB
-                    event_service.record_sequence_event(
-                        db=db,
-                        session_id=sess.id,
-                        result=val_res.result,
-                        expected_step_number=val_res.expected_step_number,
-                        expected_step_code=val_res.expected_step_code,
-                        observed_step_number=val_res.expected_step_number if val_res.result == "VALID" else None,
-                        observed_step_code=obs.action_code,
-                        confidence=obs.confidence,
-                        reason=val_res.reason
-                    )
+                        # Record Detection Event in DB
+                        event_service.record_detection_event(
+                            db=db,
+                            session_id=sess.id,
+                            entity_type="action",
+                            action_code=action_code,
+                            confidence=confidence,
+                            metadata=obs.metadata
+                        )
 
-                    # Sync Session state in DB if step advanced
-                    if val_res.result == ValidationResult.VALID.value:
-                        if val_res.next_step_number is not None:
-                            sess.current_step_number = val_res.next_step_number
-                            sess.current_step_code = val_res.next_step_code
-                            sess.expected_next_step = (
-                                f"{val_res.next_step_code} / {val_res.next_step_name or ''}"
-                                if val_res.next_step_code
-                                else None
-                            )
-                        db.commit()
-                        db.refresh(sess)
+                        # Use experiment_service for deterministic sequence validation,
+                        # sequence event persistence, and deduplicated alerts linked by validation_event_id
+                        from app.services.experiment_service import experiment_service
+                        val_res = experiment_service.validate_session_action(
+                            db=db,
+                            session_id=sess.id,
+                            action_code=action_code,
+                            confidence=confidence,
+                            observed_objects=obs.observed_objects
+                        )
+                    else:
+                        # Ephemeral validation without DB persistence when action is IDLE or unchanged
+                        val_res = self.sequence_validator.validate_observation(
+                            observation=obs,
+                            session_id=sess.id,
+                            steps=steps
+                        )
 
                     # Handle EXPERIMENT_COMPLETE
                     is_complete = (
                         val_res.result == ValidationResult.EXPERIMENT_COMPLETE.value
                         or getattr(val_res, "completed", False)
                         or getattr(val_res, "experiment_complete", False)
+                        or sess.status == SessionStatus.COMPLETED.value
                     )
 
                     proc_elapsed = (time.perf_counter() - cycle_start) * 1000.0
@@ -423,22 +431,23 @@ class RealTimeProcessor:
                         with self._lock:
                             self._state = ProcessingState.STOPPED
 
-                        sess.status = SessionStatus.COMPLETED.value
-                        sess.ended_at = datetime.now(timezone.utc)
-                        db.commit()
+                        if sess.status != SessionStatus.COMPLETED.value:
+                            sess.status = SessionStatus.COMPLETED.value
+                            sess.ended_at = datetime.now(timezone.utc)
+                            db.commit()
 
-                        event_service.record_system_event(
-                            db=db,
-                            event_type=EventType.SESSION_COMPLETED.value,
-                            message=f"Experiment session '{sess.id}' marked COMPLETED after final step.",
-                            session_id=sess.id
-                        )
-                        event_service.record_system_event(
-                            db=db,
-                            event_type=EventType.EXPERIMENT_COMPLETE.value,
-                            message="Experiment protocol completed successfully.",
-                            session_id=sess.id
-                        )
+                            event_service.record_system_event(
+                                db=db,
+                                event_type=EventType.SESSION_COMPLETED.value,
+                                message=f"Experiment session '{sess.id}' marked COMPLETED after final step.",
+                                session_id=sess.id
+                            )
+                            event_service.record_system_event(
+                                db=db,
+                                event_type=EventType.EXPERIMENT_COMPLETE.value,
+                                message="Experiment protocol completed successfully.",
+                                session_id=sess.id
+                            )
 
                         # Cleanly release session camera
                         try:

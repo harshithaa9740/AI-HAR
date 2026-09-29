@@ -21,7 +21,8 @@ from app.db.repository import (
     get_steps_for_experiment as repo_get_steps,
     update_step as repo_update_step,
     delete_step as repo_delete_step,
-    delete_steps_for_experiment
+    delete_steps_for_experiment,
+    sync_session_to_cloud
 )
 from app.schemas.experiment import (
     ExperimentCreate,
@@ -57,6 +58,11 @@ class ProtocolValidationError(ValueError):
 class ExperimentService:
     def __init__(self):
         self.validator = SequenceValidator()
+        self._last_alert_key: Dict[str, str] = {}
+
+    def clear_session_alert_cache(self, session_id: Union[int, str]):
+        """Clear cached alert debounce state for a session."""
+        self._last_alert_key.pop(str(session_id), None)
 
     # =====================================================================
     # PROTOCOL VALIDATION RULES (Deterministic, Rules 1-11)
@@ -203,6 +209,7 @@ class ExperimentService:
                 objs_val = step_data.required_objects if step_data.required_objects is not None else step_data.expected_objects
                 objs_str = json.dumps(objs_val) if isinstance(objs_val, list) else (objs_val or "[]")
 
+                val_rules = json.dumps(step_data.validation_rules) if isinstance(step_data.validation_rules, dict) else step_data.validation_rules
                 step = models.ExperimentStep(
                     experiment_id=exp.id,
                     step_number=step_data.step_number,
@@ -211,7 +218,9 @@ class ExperimentService:
                     description=step_data.description,
                     expected_action=step_data.expected_action or step_data.action_code or "ACTION",
                     required_objects=objs_str,
-                    confidence_threshold=step_data.confidence_threshold
+                    confidence_threshold=step_data.confidence_threshold,
+                    validation_rules=val_rules,
+                    expected_duration_seconds=step_data.expected_duration_seconds
                 )
                 db.add(step)
 
@@ -282,6 +291,7 @@ class ExperimentService:
                     objs_val = step_data.required_objects if step_data.required_objects is not None else step_data.expected_objects
                     objs_str = json.dumps(objs_val) if isinstance(objs_val, list) else (objs_val or "[]")
 
+                    val_rules = json.dumps(step_data.validation_rules) if isinstance(step_data.validation_rules, dict) else step_data.validation_rules
                     st = models.ExperimentStep(
                         experiment_id=exp.id,
                         step_number=step_data.step_number,
@@ -290,7 +300,9 @@ class ExperimentService:
                         description=step_data.description,
                         expected_action=step_data.expected_action or step_data.action_code or "ACTION",
                         required_objects=objs_str,
-                        confidence_threshold=step_data.confidence_threshold
+                        confidence_threshold=step_data.confidence_threshold,
+                        validation_rules=val_rules,
+                        expected_duration_seconds=step_data.expected_duration_seconds
                     )
                     db.add(st)
             except Exception as e:
@@ -345,7 +357,9 @@ class ExperimentService:
             expected_action=step_payload.expected_action or step_payload.action_code or "ACTION",
             description=step_payload.description,
             required_objects=step_payload.required_objects or step_payload.expected_objects,
-            confidence_threshold=step_payload.confidence_threshold
+            confidence_threshold=step_payload.confidence_threshold,
+            validation_rules=step_payload.validation_rules,
+            expected_duration_seconds=step_payload.expected_duration_seconds
         )
 
     def update_step(
@@ -406,6 +420,10 @@ class ExperimentService:
             update_kwargs["required_objects"] = step_payload.expected_objects
         if step_payload.confidence_threshold is not None:
             update_kwargs["confidence_threshold"] = step_payload.confidence_threshold
+        if step_payload.validation_rules is not None:
+            update_kwargs["validation_rules"] = step_payload.validation_rules
+        if step_payload.expected_duration_seconds is not None:
+            update_kwargs["expected_duration_seconds"] = step_payload.expected_duration_seconds
 
         return repo_update_step(db, target_step.id, **update_kwargs)
 
@@ -478,10 +496,12 @@ class ExperimentService:
     def seed_default_experiment_if_empty(self, db: Session) -> models.Experiment:
         """
         Seed default demonstration experiment if no experiments exist.
-        NOTE: These are placeholder demonstration experiment steps for testing
-        activity recognition and are NOT an actual spaceflight procedure.
-        Does not automatically overwrite existing experiments.
+        Safe and idempotent: checks by name or existing list so duplicates are never created on restarts.
         """
+        existing_default = get_experiment_by_name(db, "Sample Astronaut Experiment")
+        if existing_default:
+            return existing_default
+
         existing = repo_list_experiments(db)
         if existing:
             return existing[0]
@@ -621,6 +641,7 @@ class ExperimentService:
         session.ended_at = None
         db.commit()
         db.refresh(session)
+        sync_session_to_cloud(session)
 
         # Reset validator in-memory state
         self.validator.reset_session(session.id)
@@ -705,10 +726,28 @@ class ExperimentService:
         observed_step_num = obs_step_def.step_number if obs_step_def else None
         observed_step_code = obs_step_def.step_code if obs_step_def else None
 
-        # 1. Record SequenceEvent in database
-        EventRepository.record_sequence(
+        obs_step_id = obs_step_def.id if obs_step_def else None
+
+        # 1. Record DetectionEvent in database
+        try:
+            EventRepository.record_detection(
+                db=db,
+                session_id=session.id,
+                protocol_step_id=obs_step_id,
+                entity_type="ACTION",
+                entity_name=action_code,
+                action_code=action_code,
+                confidence=confidence or 0.0,
+                metadata_json={"observed_objects": observed_objects, **metadata}
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record detection event: {e}")
+
+        # 2. Record SequenceEvent in database
+        seq_event = EventRepository.record_sequence(
             db=db,
             session_id=session.id,
+            protocol_step_id=obs_step_id,
             expected_step=val_res.expected_step_number,
             expected_step_code=val_res.expected_step_code,
             observed_step=observed_step_num,
@@ -718,6 +757,7 @@ class ExperimentService:
             confidence=confidence,
             metadata=metadata
         )
+        val_event_id = seq_event.id if seq_event else None
 
         # 2. Audit Log Entry
         SessionLoggingService.log_step_event(
@@ -730,8 +770,11 @@ class ExperimentService:
             metadata={"objects": observed_objects, "message": val_res.message, **metadata}
         )
 
+        sess_key = str(session.id)
+
         # 3. Handle Database State Updates & Alerts
         if val_res.result == ValidationResult.VALID.value:
+            self._last_alert_key[sess_key] = ""
             # Advance DB session to next step
             session.current_step_number = val_res.next_step_number
             session.current_step_code = val_res.next_step_code
@@ -741,6 +784,7 @@ class ExperimentService:
                 session.status = SessionStatus.RUNNING.value
             db.commit()
             db.refresh(session)
+            sync_session_to_cloud(session)
 
             # Broadcast step validated event
             ws_manager.broadcast_sync(
@@ -764,15 +808,19 @@ class ExperimentService:
                 alert_type=AlertType.STEP_COMPLETED,
                 severity=AlertSeverity.INFO,
                 message=val_res.message,
-                voice_prompt=f"Step {val_res.completed_step} completed. Proceed to step {val_res.next_step}."
+                voice_prompt=f"Step {val_res.completed_step} completed. Proceed to step {val_res.next_step}.",
+                category="protocol",
+                validation_event_id=val_event_id
             )
 
         elif val_res.result == ValidationResult.EXPERIMENT_COMPLETE.value:
+            self._last_alert_key[sess_key] = ""
             # Finalize session in DB
             session.status = SessionStatus.COMPLETED.value
             session.ended_at = datetime.now(timezone.utc)
             db.commit()
             db.refresh(session)
+            sync_session_to_cloud(session)
 
             # Create Alert for experiment completion
             AlertService.create_and_dispatch_alert(
@@ -781,7 +829,9 @@ class ExperimentService:
                 alert_type=AlertType.EXPERIMENT_COMPLETE,
                 severity=AlertSeverity.INFO,
                 message="Experiment completed successfully.",
-                voice_prompt="Experiment completed successfully."
+                voice_prompt="Experiment completed successfully.",
+                category="protocol",
+                validation_event_id=val_event_id
             )
 
             ws_manager.broadcast_sync(
@@ -791,15 +841,20 @@ class ExperimentService:
             )
 
         elif val_res.result == ValidationResult.STEP_SKIPPED.value:
-            # Create AlertEvent for skipped step (state remains unchanged)
-            AlertService.create_and_dispatch_alert(
-                db=db,
-                session_id=session.id,
-                alert_type=AlertType.STEP_SKIPPED,
-                severity=AlertSeverity.WARNING,
-                message=val_res.message,
-                voice_prompt=f"Warning. Step {val_res.expected_step_code} has not been completed."
-            )
+            alert_key = f"{val_res.result}_{val_res.expected_step_number}_{action_code}"
+            if self._last_alert_key.get(sess_key) != alert_key:
+                self._last_alert_key[sess_key] = alert_key
+                # Create AlertEvent for skipped step (state remains unchanged)
+                AlertService.create_and_dispatch_alert(
+                    db=db,
+                    session_id=session.id,
+                    alert_type=AlertType.STEP_SKIPPED,
+                    severity=AlertSeverity.WARNING,
+                    message=val_res.message,
+                    voice_prompt=f"Warning. Step {val_res.expected_step_code} has not been completed.",
+                    category="protocol",
+                    validation_event_id=val_event_id
+                )
             ws_manager.broadcast_sync(
                 event_type=EventType.STEP_SKIPPED.value,
                 data={
@@ -811,15 +866,20 @@ class ExperimentService:
             )
 
         elif val_res.result == ValidationResult.OUT_OF_SEQUENCE.value:
-            # Create AlertEvent for out of sequence (state remains unchanged)
-            AlertService.create_and_dispatch_alert(
-                db=db,
-                session_id=session.id,
-                alert_type=AlertType.OUT_OF_SEQUENCE,
-                severity=AlertSeverity.WARNING,
-                message=val_res.message,
-                voice_prompt="Warning. Unexpected action out of sequence."
-            )
+            alert_key = f"{val_res.result}_{val_res.expected_step_number}_{action_code}"
+            if self._last_alert_key.get(sess_key) != alert_key:
+                self._last_alert_key[sess_key] = alert_key
+                # Create AlertEvent for out of sequence (state remains unchanged)
+                AlertService.create_and_dispatch_alert(
+                    db=db,
+                    session_id=session.id,
+                    alert_type=AlertType.OUT_OF_SEQUENCE,
+                    severity=AlertSeverity.WARNING,
+                    message=val_res.message,
+                    voice_prompt="Warning. Unexpected action out of sequence.",
+                    category="protocol",
+                    validation_event_id=val_event_id
+                )
             ws_manager.broadcast_sync(
                 event_type=EventType.OUT_OF_SEQUENCE.value,
                 data={
@@ -831,27 +891,37 @@ class ExperimentService:
             )
 
         elif val_res.result == ValidationResult.UNKNOWN_ACTION.value:
-            # Create AlertEvent for unknown action (state remains unchanged)
-            AlertService.create_and_dispatch_alert(
-                db=db,
-                session_id=session.id,
-                alert_type=AlertType.UNKNOWN_ACTION,
-                severity=AlertSeverity.WARNING,
-                message=val_res.message,
-                voice_prompt="Warning. Unknown action detected."
-            )
+            alert_key = f"{val_res.result}_{val_res.expected_step_number}_{action_code}"
+            if self._last_alert_key.get(sess_key) != alert_key:
+                self._last_alert_key[sess_key] = alert_key
+                # Create AlertEvent for unknown action (state remains unchanged)
+                AlertService.create_and_dispatch_alert(
+                    db=db,
+                    session_id=session.id,
+                    alert_type=AlertType.UNKNOWN_ACTION,
+                    severity=AlertSeverity.WARNING,
+                    message=val_res.message,
+                    voice_prompt="Warning. Unknown action detected.",
+                    category="protocol",
+                    validation_event_id=val_event_id
+                )
 
         elif val_res.result == ValidationResult.VERIFY_REQUIRED.value:
-            # Create AlertEvent for low confidence / missing object (state remains unchanged)
-            alert_type = AlertType.OBJECT_NOT_DETECTED if ("object" in val_res.message.lower() or val_res.reason == "OBJECT_NOT_DETECTED") else AlertType.LOW_CONFIDENCE
-            AlertService.create_and_dispatch_alert(
-                db=db,
-                session_id=session.id,
-                alert_type=alert_type,
-                severity=AlertSeverity.WARNING,
-                message=val_res.message,
-                voice_prompt="Verification required."
-            )
+            alert_key = f"{val_res.result}_{val_res.expected_step_number}_{action_code}"
+            if self._last_alert_key.get(sess_key) != alert_key:
+                self._last_alert_key[sess_key] = alert_key
+                # Create AlertEvent for low confidence / missing object (state remains unchanged)
+                alert_type = AlertType.OBJECT_NOT_DETECTED if ("object" in val_res.message.lower() or val_res.reason == "OBJECT_NOT_DETECTED") else AlertType.LOW_CONFIDENCE
+                AlertService.create_and_dispatch_alert(
+                    db=db,
+                    session_id=session.id,
+                    alert_type=alert_type,
+                    severity=AlertSeverity.WARNING,
+                    message=val_res.message,
+                    voice_prompt="Verification required.",
+                    category="protocol",
+                    validation_event_id=val_event_id
+                )
 
         return val_res
 

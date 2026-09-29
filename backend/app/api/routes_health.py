@@ -36,7 +36,7 @@ def get_health(db: Session = Depends(get_db)):
         environment=settings.APP_ENV,
         offline_mode=settings.OFFLINE_ONLY,
         database_connected=db_ok,
-        database_path=settings.DATABASE_URL
+        database_path=settings.sanitized_database_url
     )
 
 
@@ -63,7 +63,7 @@ def get_system_status(db: Session = Depends(get_db)):
         offline_mode=settings.OFFLINE_ONLY,
         ai_mode=settings.AI_MODE,
         database_connected=db_ok,
-        database_path=settings.DATABASE_URL,
+        database_path=settings.sanitized_database_url,
         active_sessions=active_sessions_count,
         video_worker_running=video_worker.is_running,
         video_source=str(video_service.source),
@@ -73,3 +73,10 @@ def get_system_status(db: Session = Depends(get_db)):
         voice_engine_active=voice_status.get("enabled", True),
         confidence_threshold=settings.CONFIDENCE_THRESHOLD
     )
+
+
+@router.get("/system/supabase-status")
+def get_supabase_status():
+    """Returns connectivity and schema table status for the configured Supabase project."""
+    from app.services.supabase_service import supabase_service
+    return supabase_service.check_connection()
